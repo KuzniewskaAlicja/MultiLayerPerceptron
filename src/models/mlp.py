@@ -1,12 +1,13 @@
 import numpy as np
 
 from src.utils import ReLU, Softmax
-from .layers import HiddenLayer, OutputLayer
+from .layers import HiddenLayer, OutputLayer, InputLayer
 
 
 class MultiLayerPerceptron:
     def __init__(self, input_size: int, classes_nb: int):
-        self.layer1 = HiddenLayer(input_size, 16, ReLU())
+        self.input_layer = InputLayer(input_size)
+        self.layer1 = HiddenLayer(self.input_layer.input_size, 16, ReLU())
         self.layer2 = HiddenLayer(16, 8, ReLU())
         self.out_layer = OutputLayer(8, classes_nb, Softmax())
     
@@ -29,6 +30,17 @@ class MultiLayerPerceptron:
         self.layer2.update_params(learning_rate)
         self.out_layer.update_params(learning_rate)
     
+    def __repr__(self):
+        arch = f"{self.__class__.__name__}(\n"
+        layers = [
+            self.input_layer, self.layer1, self.layer2, self.output_layer
+        ]
+        for i, layer in layers:
+            arch += f"\t[{i}] {repr(layer)}"
+        arch += ")"
+
+        return arch
+
     def save_model(self):
         ...
     

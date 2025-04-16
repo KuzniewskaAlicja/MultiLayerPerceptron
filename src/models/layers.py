@@ -1,5 +1,19 @@
 import numpy as np
 from collections.abc import Callable
+from dataclasses import dataclass
+
+
+@dataclass
+class InputLayer:
+    input_size: int
+
+    def forward(self, input: np.ndarray):
+        return input
+    
+    def __repr__(self):
+        return (
+            f"InputLayer({self.input_size})"
+        )
 
 
 class BaseLayer:
@@ -9,8 +23,10 @@ class BaseLayer:
         features_out_size: int,
         activation: Callable
     ):
-        self.weights = np.random.randn(features_in_size, features_out_size) * 0.01
-        self.biases = np.zeros((1, features_out_size))
+        self.features_in_size = features_in_size
+        self.features_out_size = features_out_size
+        self.weights = np.random.randn(self.features_in_size, self.features_out_size) * 0.01
+        self.biases = np.zeros((self.features_out_size,))
         self.activation = activation
         self.input = None
         self.output = None
@@ -26,6 +42,13 @@ class BaseLayer:
         if self.input is not None and self.delta is not None:
             self.weights -= learning_rate * self.input.T @ self.delta
             self.biases -= learning_rate * np.sum(self.delta, axis=0, keepdims=True)
+    
+    def __repr__(self):
+        return (
+            "{}"
+            f"({self.features_in_size} -> {self.features_out_size})"
+            f"activation={self.activation.__class__.__name__}"
+        )
 
 
 class HiddenLayer(BaseLayer):
@@ -34,7 +57,11 @@ class HiddenLayer(BaseLayer):
         self.delta = error * self.activation.derivative(self.output)
 
         return self.delta
+    
+    def __repr__(self):
+        return super().__repr__().format("HiddenLayer")
 
 
 class OutputLayer(BaseLayer):
-    ...
+    def __repr__(self):
+        return super().__repr__().format("OutputLayer")
