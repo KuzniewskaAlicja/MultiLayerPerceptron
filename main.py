@@ -1,18 +1,40 @@
 import numpy as np
 import argparse
 
-from src.models import MultiLayerPerceptron
-from src.utils import CategoricalCrossEntropy
+from src.models import MultiLayerPerceptron, ModelCheckpoint
+from src.utils import CategoricalCrossEntropy, Accuracy
 from src.dataset import Dataset
+
+
+parser = argparse.ArgumentParser()
+parser.add_argument(
+    "--early_stopping",
+    type=int,
+    default=None,
+    help="Number of epochs to wait until stop training for no progress"
+)
+parser.add_argument(
+    "--name",
+    type=str,
+    default="model",
+    help="Model name"
+)
+parser.add_argument(
+    "--model_weights",
+    type=str,
+    default=None,
+    help="Path to model weights npz file"
+)
+args = parser.parse_args()
 
 
 def generate_data(
     n_samples: int,
     n_features: int,
     classes_nb: int,
-    seed: int | None = None
+    seed: int = 0
 ):
-    if seed is not None:
+    if seed:
         np.random.seed(seed)
     
     samples_per_class = n_samples // classes_nb
@@ -28,46 +50,53 @@ def generate_data(
         data.append(class_samples)
         labels.append(class_labels)
 
-    print(data[0].shape, labels[0].shape)
-
     data = np.vstack(data)
     labels = np.concatenate(labels)
 
     onehot_labels = np.zeros((labels.size, classes_nb))
     onehot_labels[np.arange(labels.size), labels] = 1
 
-    return data, labels
+    return data, onehot_labels
 
 
 def train(model: MultiLayerPerceptron, dataset: Dataset):
     learning_rate = 0.001
     cat_crossentropy = CategoricalCrossEntropy()
-    epochs = 100
+    epochs = 20
+    metric = Accuracy()
     batch_size = {"val": 64, "train": 32}
+    checkpoint = ModelCheckpoint(
+        model, "accuracy", "max", args.early_stopping
+    )
 
     dataset.split(val_factor=0.15, shuffle=True)
+    dataset.normalize()
 
-    best_loss = float("inf")
     for epoch in range(epochs):
         print(20 * "-" + f"Epoch: {epoch}/{epochs}" + 20 * "-")
         for learning_step in ["train", "val"]:
-            loss = 0.0
+            loss, acc = 0.0, 0.0
             batch_data = dataset.get_batches(
                 learning_step, batch_size[learning_step]
             )
             for data, labels in batch_data:
                 predictions = model.predict(data)
-                loss += cat_crossentropy(labels, predictions)
+                loss += cat_crossentropy(predictions, labels)
+                acc += metric(predictions, labels)
                 if learning_step == "train":
-                    model.backprogation(labels, cat_crossentropy, learning_rate)
-            
-            print(f"{learning_step.upper()}_loss: {loss / len(batch_data)}")
+                    model.backprogation(labels, learning_rate)
 
-        # model checkpoint based on validation loss
+            loss /= len(batch_data)
+            acc /= len(batch_data)
+            print(f"{learning_step.upper()} - loss: {loss} acc: {acc}")
 
-
-def eval():
-    ...
+            if learning_step == "val":
+                should_stop = checkpoint.check_improvement(acc)
+                break
+        if should_stop:
+            print(f"Finished training on {epoch} epoch")
+            break
+    checkpoint.save_model(f"./models/{args.name}.npz")
 
 
 if __name__ == "__main__":
@@ -76,10 +105,12 @@ if __name__ == "__main__":
     data, labels = generate_data(
         n_samples=500,
         n_features=n_features,
-        classes_nb=classes_nb
+        classes_nb=classes_nb,
+        seed=42
     )
     dataset = Dataset(data, labels)
     model = MultiLayerPerceptron(input_size=n_features, classes_nb=classes_nb)
     print("Model architecture: ", model)
-
+    if args.model_weights:
+        model.load_weights(args.model_weights)
     train(model, dataset)
